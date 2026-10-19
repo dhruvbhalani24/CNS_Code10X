@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeX10 NIDS-SIEM · Security Operations</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f17; --panel:#121826; --panel2:#0e1420; --line:#1e2736;
+    --txt:#dce3f0; --muted:#7a8699; --accent:#3ddc97; --blue:#4aa3ff;
+    --red:#ff5c74; --amber:#ffb14a; --purple:#b48bff;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif}
+  body{background:var(--bg);color:var(--txt);min-height:100vh}
+  header{display:flex;align-items:center;gap:16px;padding:14px 24px;
+    border-bottom:1px solid var(--line);background:var(--panel2);
+    position:sticky;top:0;z-index:10}
+  header h1{font-size:17px;letter-spacing:.5px}
+  header h1 span{color:var(--accent)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 8px var(--accent);animation:pulse 1.6s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .spacer{flex:1}
+  .badge{font-size:11px;padding:4px 10px;border:1px solid var(--line);
+    border-radius:12px;color:var(--muted)}
+  .btn{cursor:pointer;border:1px solid var(--line);background:var(--panel);
+    color:var(--txt);padding:7px 13px;border-radius:8px;font-size:12.5px;
+    transition:.15s}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.attack{border-color:#5c2733;color:var(--red)}
+  .btn.attack:hover{background:#2a1420}
+  .btn.danger{color:var(--amber)}
+  main{max-width:1420px;margin:0 auto;padding:20px 24px 60px}
+  /* KPI cards */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:14px;margin-bottom:20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px}
+  .card .label{font-size:11px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:1px}
+  .card .value{font-size:26px;font-weight:700;margin-top:6px}
+  .card .value.red{color:var(--red)} .card .value.blue{color:var(--blue)}
+  .card .value.amber{color:var(--amber)}
+  /* grid */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+  .panel{background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:16px}
+  .panel h3{font-size:13px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:1px;margin-bottom:12px}
+  .chart-box{position:relative;height:230px}
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{color:var(--muted);text-align:left;font-weight:600;padding:8px 10px;
+    border-bottom:1px solid var(--line);font-size:11px;
+    text-transform:uppercase;letter-spacing:.6px}
+  td{padding:7px 10px;border-bottom:1px solid var(--line)}
+  tr:hover td{background:var(--panel2)}
+  .mono{font-family:'Cascadia Code',Consolas,monospace;color:var(--blue)}
+  .sev{padding:2px 9px;border-radius:10px;font-size:10.5px;font-weight:700}
+  .sev.CRITICAL{background:#3d1520;color:var(--red)}
+  .sev.HIGH{background:#3d2c12;color:var(--amber)}
+  .sev.MEDIUM{background:#122c44;color:var(--blue)}
+  .sev.LOW,.sev.INFO{background:#152421;color:var(--muted)}
+  .lbl{padding:2px 8px;border-radius:10px;font-size:10.5px;
+    background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
+  .lbl.port_scan{color:var(--amber);border-color:#3d2c12}
+  .lbl.dos{color:var(--red);border-color:#3d1520}
+  .lbl.c2{color:var(--purple);border-color:#2a1c3d}
+  .lbl.exfil{color:var(--blue);border-color:#122c44}
+  #toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+  input[type=text]{background:var(--panel);border:1px solid var(--line);
+    color:var(--txt);padding:7px 12px;border-radius:8px;width:240px;font-size:13px}
+  .flash{position:fixed;right:20px;bottom:20px;background:var(--panel);
+    border:1px solid var(--accent);color:var(--accent);padding:12px 18px;
+    border-radius:10px;font-size:13px;opacity:0;transition:.3s;z-index:99}
+  .flash.show{opacity:1}
+  @media(max-width:960px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="dot"></div>
+  <h1>CodeX10 <span>NIDS-SIEM</span> · Security Operations</h1>
+  <span class="badge" id="backend-badge">storage: …</span>
+  <span class="badge" id="clock"></span>
+  <div class="spacer"></div>
+  <button class="btn" onclick="runDemo([])">▶ Generate Normal Traffic</button>
+  <button class="btn attack" onclick="runDemo(['port_scan'])">Port Scan</button>
+  <button class="btn attack" onclick="runDemo(['dos'])">DoS</button>
+  <button class="btn attack" onclick="runDemo(['c2'])">C2 Beacon</button>
+  <button class="btn attack" onclick="runDemo(['exfil'])">Exfil</button>
+  <button class="btn attack" onclick="runDemo(['port_scan','dos','c2','exfil'])">⚡ Full Attack</button>
+  <button class="btn danger" onclick="resetIndex()">Clear</button>
+</header>
+
+<main>
+  <!-- KPI cards -->
+  <div class="kpis">
+    <div class="card"><div class="label">Network Events</div>
+      <div class="value blue" id="kpi-events">0</div></div>
+    <div class="card"><div class="label">Total Alerts</div>
+      <div class="value amber" id="kpi-alerts">0</div></div>
+    <div class="card"><div class="label">Critical Alerts</div>
+      <div class="value red" id="kpi-critical">0</div></div>
+    <div class="card"><div class="label">Source Hosts</div>
+      <div class="value" id="kpi-srcs">0</div></div>
+    <div class="card"><div class="label">Target Hosts</div>
+      <div class="value" id="kpi-dsts">0</div></div>
+  </div>
+
+  <!-- charts row 1 -->
+  <div class="grid">
+    <div class="panel"><h3>Events & Alerts Over Time</h3>
+      <div class="chart-box"><canvas id="chart-time"></canvas></div></div>
+    <div class="panel"><h3>Severity Distribution</h3>
+      <div class="chart-box"><canvas id="chart-sev"></canvas></div></div>
+  </div>
+
+  <!-- charts row 2 -->
+  <div class="grid">
+    <div class="panel"><h3>Top Source IPs</h3>
+      <div class="chart-box"><canvas id="chart-src"></canvas></div></div>
+    <div class="panel"><h3>Top Targeted Ports</h3>
+      <div class="chart-box"><canvas id="chart-port"></canvas></div></div>
+  </div>
+
+  <!-- alerts table -->
+  <div class="panel" style="margin-bottom:20px">
+    <h3>🚨 Recent Security Alerts</h3>
+    <div style="max-height:340px;overflow:auto">
+      <table id="alerts-table">
+        <thead><tr><th>Time</th><th>Severity</th><th>Type</th>
+          <th>Source</th><th>Target</th><th>Detector</th><th>Description</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- events table -->
+  <div class="panel">
+    <div id="toolbar">
+      <h3 style="align-self:center">🌐 Network Events</h3>
+      <input type="text" id="search" placeholder="Filter by IP / domain…"
+             onkeyup="if(event.key==='Enter')loadEvents()">
+      <button class="btn" onclick="loadEvents()">Search</button>
+    </div>
+    <div style="max-height:420px;overflow:auto">
+      <table id="events-table">
+        <thead><tr><th>Time</th><th>Source</th><th>Destination</th>
+          <th>Port</th><th>Proto</th><th>Service</th><th>Bytes</th>
+          <th>State</th><th>Label</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<div class="flash" id="flash"></div>
+
+<script>
+/* ============================ helpers ================================= */
+const $ = id => document.getElementById(id);
+const fmtTime = ts => ts ? new Date(ts*1000).toLocaleTimeString() : '—';
+const fmtBytes = b => b>1e6 ? (b/1e6).toFixed(1)+' MB'
+                    : b>1e3 ? (b/1e3).toFixed(1)+' KB' : b+' B';
+function flash(msg){ const f=$('flash'); f.textContent=msg;
+  f.classList.add('show'); setTimeout(()=>f.classList.remove('show'),2600); }
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+/* ============================ charts ================================== */
+const charts = {};
+function makeChart(id, cfg){
+  if(charts[id]) charts[id].destroy();
+  charts[id] = new Chart($(id), cfg);
+}
+function drawTimeSeries(rows){
+  const labels = rows.map(r=>fmtTime(r.ts));
+  makeChart('chart-time', { type:'line',
+    data:{ labels, datasets:[
+      {label:'Events', data:rows.map(r=>r.events), borderColor:'#4aa3ff',
+       backgroundColor:'rgba(74,163,255,.12)', fill:true, tension:.35,
+       pointRadius:0, borderWidth:2},
+      {label:'Alerts', data:rows.map(r=>r.alerts), borderColor:'#ff5c74',
+       backgroundColor:'rgba(255,92,116,.18)', fill:true, tension:.35,
+       pointRadius:0, borderWidth:2}]},
+    options:{responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#7a8699'}}},
+      scales:{x:{ticks:{color:'#7a8699',maxTicksLimit:8},
+                 grid:{color:'#1e2736'}},
+              y:{beginAtZero:true,ticks:{color:'#7a8699'},
+                 grid:{color:'#1e2736'}}}}});
+}
+function drawSeverity(brk){
+  makeChart('chart-sev', { type:'doughnut',
+    data:{ labels:brk.map(b=>b.severity),
+      datasets:[{ data:brk.map(b=>b.count),
+        backgroundColor:['#7a8699','#3ddc97','#4aa3ff','#ffb14a','#ff5c74'],
+        borderColor:'#121826', borderWidth:3}]},
+    options:{responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{legend:{position:'right',
+        labels:{color:'#dce3f0', padding:12}}}}});
+}
+function drawBar(id, rows, color, label){
+  makeChart(id, { type:'bar',
+    data:{ labels:rows.map(r=>r.value),
+      datasets:[{label, data:rows.map(r=>r.count),
+        backgroundColor:color, borderRadius:5, maxBarThickness:34}]},
+    options:{indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{x:{beginAtZero:true,ticks:{color:'#7a8699'},
+                 grid:{color:'#1e2736'}},
+              y:{ticks:{color:'#dce3f0'}, grid:{display:false}}}}});
+}
+
+/* ============================ data load =============================== */
+async function loadSummary(){
+  const s = await api('/api/summary');
+  $('kpi-events').textContent   = s.total_events.toLocaleString();
+  $('kpi-alerts').textContent   = s.total_alerts.toLocaleString();
+  $('kpi-critical').textContent = s.critical_alerts.toLocaleString();
+  $('kpi-srcs').textContent     = s.attackers.toLocaleString();
+  $('kpi-dsts').textContent     = s.targets.toLocaleString();
+  $('backend-badge').textContent = 'storage: ' + (s.stats.backend||'?');
+  drawSeverity(s.severity_breakdown||[]);
+}
+async function loadCharts(){
+  drawTimeSeries(await api('/api/timeseries?bucket=60'));
+  drawBar('chart-src',  await api('/api/top/src_ip?n=8'),
+          'rgba(74,163,255,.75)', 'events');
+  drawBar('chart-port', await api('/api/top/dst_port?n=8'),
+          'rgba(61,220,151,.75)', 'events');
+}
+async function loadAlerts(){
+  const rows = await api('/api/alerts?limit=30');
+  $('alerts-table').querySelector('tbody').innerHTML = rows.map(a=>`
+    <tr><td class="mono">${fmtTime(a.ts)}</td>
+        <td><span class="sev ${a.severity}">${a.severity}</span></td>
+        <td><b>${a.event_type}</b></td>
+        <td class="mono">${a.src_ip||'—'}</td>
+        <td class="mono">${a.dst_ip||'—'}</td>
+        <td>${a.detected_by}</td>
+        <td style="max-width:380px">${a.description}</td></tr>`).join('');
+}
+async function loadEvents(){
+  const q = $('search').value.trim();
+  const rows = await api('/api/events?limit=40' + (q?`&search=${q}`:''));
+  $('events-table').querySelector('tbody').innerHTML = rows.map(e=>`
+    <tr><td class="mono">${fmtTime(e.ts)}</td>
+        <td class="mono">${e.src_ip}</td>
+        <td class="mono">${e.dst_ip}</td>
+        <td class="mono">${e.dst_port}</td>
+        <td>${e.proto}</td><td>${e.service}</td>
+        <td class="mono">${fmtBytes(e.orig_bytes||0)}</td>
+        <td>${e.conn_state}</td>
+        <td><span class="lbl ${e.label}">${e.label}</span></td></tr>`).join('');
+}
+
+/* ============================ actions ================================= */
+async function runDemo(attacks){
+  flash(attacks.length ? '⚔ Injecting attack: '+attacks.join(', ')
+                       : 'Generating normal traffic…');
+  try{
+    const r = await api('/api/demo/run', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({attacks, normal_events: attacks.length?200:400})});
+    flash(`✔ ${r.pipeline_stats.events_seen} events · `
+        + `${r.pipeline_stats.alerts_raised} alerts raised`);
+    refreshAll();
+  }catch(e){ flash('✖ demo failed: '+e.message); }
+}
+async function resetIndex(){
+  if(!confirm('Wipe all indexed events and alerts?')) return;
+  await api('/api/reset', {method:'POST'});
+  flash('🗑 Index cleared'); refreshAll();
+}
+
+/* ============================ live SSE ================================ */
+function connectLive(){
+  if(!window.EventSource) return;
+  const es = new EventSource('/api/live/alerts');
+  es.onmessage = ev => { const a = JSON.parse(ev.data);
+    flash(`🚨 LIVE ${a.severity}: ${a.event_type} from ${a.src_ip}`);
+    loadAlerts(); loadSummary(); };
+  es.onerror = () => es.close();      // polling still covers us
+}
+
+/* ============================ boot ==================================== */
+function refreshAll(){ loadSummary(); loadCharts();
+                       loadAlerts(); loadEvents(); }
+setInterval(()=>{ loadSummary(); loadAlerts(); }, 4000);   // light poll
+setInterval(loadCharts, 15000);                            // heavy poll
+setInterval(()=>{ $('clock').textContent =
+  new Date().toLocaleString(); }, 1000);
+refreshAll(); connectLive();
+</script>
+</body>
+</html>
