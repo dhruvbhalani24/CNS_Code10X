@@ -73,7 +73,10 @@ class ZeekSensor(BaseSensor):
         fields: list[str] = []
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
             fh.seek(offset)
-            for line in fh:
+            while True:
+                line = fh.readline()
+                if not line:
+                    break
                 stripped = line.rstrip("\n")
                 if not stripped:
                     continue
